@@ -1,0 +1,158 @@
+from time import strftime
+import ssl
+from selenium import webdriver
+import pandas as pd
+import time
+import datetime
+import smtplib
+from email.mime.multipart import MIMEMultipart
+
+chromedriver_path = 'C:/webdrivers/chromedriver_win32/chromedriver.exe'
+
+browser = webdriver.Chrome(executable_path=chromedriver_path)
+
+data_frame = pd.DataFrame()
+
+
+def scrape_data():
+    global data_frame
+    global departures
+    global arrivals
+    global airlines_list
+    global prices
+    global durations_list
+    global stops_list
+
+    departure = browser.find_elements_by_xpath("//span[contains(@class,'hour departure')]")
+    arrival = browser.find_elements_by_xpath("//span[contains(@class,'hour arrival')]")
+    airlines = browser.find_elements_by_xpath("//div[contains(@class,'logo-container')]/img-fallback/img")
+    prices = browser.find_elements_by_xpath("//span[contains(@class, 'amount')]")
+    durations = browser.find_elements_by_xpath("//div/span[contains(@class,'flight-time')]/span[2]")
+    stops = browser.find_elements_by_xpath("//span[@class='connecting-info']/span")
+
+    departures = [value.text for value in departure]
+    arrivals = [value.text for value in arrival]
+    airlines_list = [value.get_attribute('alt') for value in airlines]
+    prices = [value.text for value in prices]
+    durations_list = [value.text for value in durations[::2]]
+    stops_list = [value.text for value in stops[::2]]
+
+    current = datetime.datetime.now()
+    date = (str(current.year)+'-'+str(current.month)+'-'+str(current.day))
+    time = (str(current.hour)+':'+str(current.minute))
+    price_col = 'price'+'('+date+'---'+time+')'
+
+    for idx in range(len(departures)):
+        try:
+            data_frame.loc[idx, 'Departure'] = departures[idx]
+        except Exception as e:
+            pass
+        try:
+            data_frame.loc[idx, 'Arrival'] = arrivals[idx]
+        except Exception as e:
+            pass
+        try:
+            data_frame.loc[idx, 'Airline'] = airlines_list[idx]
+        except Exception as e:
+            pass
+        try:
+            data_frame.loc[idx, 'Duration'] = durations_list[idx]
+        except Exception as e:
+            pass
+        try:
+            data_frame.loc[idx, 'Stops'] = stops_list[idx]
+        except Exception as e:
+            pass
+        try:
+            data_frame.loc[idx, str(price_col)] = prices[idx]
+        except Exception as e:
+            pass
+
+
+username = 'myfakea89@gmail.com'
+password = 'zaq1@WSX'
+
+
+def mail_login(username, password):
+    global server
+    context = ssl.create_default_context()
+
+    try:
+        server = smtplib.SMTP('smtp.gmail.com', 587)
+        server.ehlo()
+        server.starttls(context=context)
+        server.ehlo()
+        # print(username)
+        server.login(username, password)
+    except Exception as e:
+        print(e)
+
+
+def create_message():
+    global msg
+    msg = '\nYour current cheapest flight:\n\nDeparture time: {}\nArrival time: {}\nAirline: {}\nFlight duration: {}\nNo. of stops: {}\nPrice: {} PLN\n'.format(
+        best_departure,
+        best_arrival,
+        best_airline,
+        best_duration,
+        best_stops,
+        best_price)
+
+
+def send_message(msg):
+    global message
+    message = MIMEMultipart()
+    message['Subject'] = 'Best flight'
+    message['From'] = 'my-host@gmail.com'
+    message['to'] = 'second-account@gmail.com'
+
+    server.sendmail('my-host@gmail.com', 'second-account@gmail.com', msg)
+
+
+city_from = input('Enter your departure point: ')
+city_to = input('Enter your arrival point ')
+date_start = input('Departure date? (YYYY-MM-DD) ')
+date_end = input('Return when? (YYYY-MM-DD) ')
+
+
+# city_from = 'nyc'
+# city_to = 'krk'
+# date_start = '2020-03-12'
+# date_end = '2020-04-12'
+
+
+def run_link(city_from, city_to, date_start, date_end):
+    link = 'https://www.esky.pl/flights/select/roundtrip/ap/'+city_from+'/mp/'+city_to+'?departureDate='+date_start+'&returnDate='+date_end+'&pa=1&py=0&pc=0&pi=0&sc=economy'
+    time.sleep(3)
+    browser.get(link)
+    time.sleep(15)
+
+
+for i in range(0, 5):
+    run_link(city_from, city_to, date_start, date_end)
+    time.sleep(15)
+
+    scrape_data()
+    print(data_frame)
+    current_values = data_frame.iloc[0]
+    print(current_values)
+    best_departure = current_values[0]
+    best_arrival = current_values[1]
+    best_airline = current_values[2]
+    best_duration = current_values[3]
+    best_stops = current_values[4]
+    best_price = current_values[-1]
+
+    data_frame.to_excel('{}_flight_{}-{}_from_{}_to_{}.xlsx'.format(strftime('%Y%m%d-%H%M'),
+                                                                                     city_from, city_to,
+                                                                                     date_start, date_end), index=False)
+
+    print('Sheet created!')
+
+    create_message()
+    mail_login(username, password)
+    send_message(msg)
+    print('Email sent!')
+
+    time.sleep(60 * 60 * 3)
+    browser.quit()

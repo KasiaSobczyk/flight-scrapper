@@ -69,8 +69,8 @@ def scrape_data():
             pass
 
 
-username = 'myfakea89@gmail.com'
-password = 'zaq1@WSX'
+username = 'my-host@gmail.com'
+password = '*******'
 
 
 def mail_login(username, password):
